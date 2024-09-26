@@ -1,5 +1,6 @@
 package org.openas2;
 
+import org.openas2.message.MessageFactory;
 import org.openas2.cert.CertificateFactory;
 import org.openas2.partner.PartnershipFactory;
 import org.openas2.processor.Processor;
@@ -23,6 +24,9 @@ public interface Session {
 
     String DEFAULT_CONTENT_TRANSFER_ENCODING = "binary";
     String LOG_LEVEL_OVERRIDE_KEY = "logging.level.override";
+
+    public static final String PARTNERSHIP_POLLER = "partnership"; // Poller configured in a partnership.xml
+    public static final String CONFIG_POLLER = "config"; // Poller configured in a config.xml
 
     /**
      * Lifecycle control method.
@@ -76,6 +80,16 @@ public interface Session {
     PartnershipFactory getPartnershipFactory() throws ComponentNotFoundException;
 
     /**
+     * Short-cut method to retrieve a message factory.
+     *
+     * @return the currently registered <code>MessageFactory</code> component
+     * @throws ComponentNotFoundException If a <code>MessageFactory</code> component has not been registered
+     * @see MessageFactory
+     * @see Component
+     */
+    MessageFactory getMessageFactory() throws ComponentNotFoundException;
+
+    /**
      * Short-cut method to retrieve a processor.
      *
      * @return the currently registered <code>Processor</code> component
@@ -97,7 +111,7 @@ public interface Session {
     public void loadPartnershipPoller(Node moduleNode, String partnershipName, String configSource) throws OpenAS2Exception;
     
     public void startPartnershipPollers() throws OpenAS2Exception;
-    public void destroyPartnershipPollers();
+    public void destroyPartnershipPollers(String configSourceFilter);
 
     String getBaseDirectory();
 

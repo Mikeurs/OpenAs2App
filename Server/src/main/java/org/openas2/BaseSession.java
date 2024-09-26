@@ -4,6 +4,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openas2.cert.CertificateFactory;
 import org.openas2.lib.message.AS2Standards;
+import org.openas2.message.MessageFactory;
 import org.openas2.partner.PartnershipFactory;
 import org.openas2.processor.Processor;
 import org.openas2.processor.ProcessorModule;
@@ -47,7 +48,7 @@ public abstract class BaseSession implements Session {
 
     @Override
     public void stop() throws Exception {
-        destroyPartnershipPollers();
+        destroyPartnershipPollers(null);
         for (Component component : components.values()) {
             component.destroy();
         }
@@ -94,6 +95,10 @@ public abstract class BaseSession implements Session {
 
     public PartnershipFactory getPartnershipFactory() throws ComponentNotFoundException {
         return (PartnershipFactory) getComponent(PartnershipFactory.COMPID_PARTNERSHIP_FACTORY);
+    }
+
+    public MessageFactory getMessageFactory() throws ComponentNotFoundException {
+        return (MessageFactory) getComponent(MessageFactory.COMPID_MESSAGE_FACTORY);
     }
 
     public Processor getProcessor() throws ComponentNotFoundException {
@@ -146,11 +151,14 @@ public abstract class BaseSession implements Session {
         }
     }
 
-    public void destroyPartnershipPollers() {
+    public void destroyPartnershipPollers(String configSourceFilter) {
         LOGGER.trace("Destroying partnership pollers...");
         List<String> stoppedPollerKeys = new ArrayList<String>();
         for (Map.Entry<String, Map<String, Object>> entry : polledDirectories.entrySet()) {
             Map<String, Object> meta = entry.getValue();
+            if (configSourceFilter != null && !meta.get("configSource").equals(configSourceFilter)) {
+                continue;
+            }
             DirectoryPollingModule poller = (DirectoryPollingModule) meta.get("pollerInstance");
             try {
                 LOGGER.trace("Destroying poller:" + meta);

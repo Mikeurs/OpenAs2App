@@ -39,6 +39,7 @@ import java.io.ByteArrayInputStream;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -107,31 +108,60 @@ public class ApiResource {
 
     }
 
+    private CommandResult processRequest(String resource, String action, String itemId, MultivaluedMap<String, String> formParams) throws Exception {
+        List<String> params = new ArrayList<>();
+        if (action != null) {
+            params.add(action);
+        }
+        if (itemId != null && itemId.length() > 1) {
+            params.add(itemId.substring(1));
+        }
+        Iterator<String> iter = ui.getQueryParameters().keySet().iterator();
+        while (iter.hasNext()) {
+            String valueKey = iter.next();
+            String valueParam = ui.getQueryParameters().getFirst(valueKey);
+            params.add(valueKey + "=" + valueParam);
+        }
+        if (formParams != null) {
+            int length = formParams.size();
+            for (int index = 0; index < length; index++) {
+                String ndxAsStr = String.valueOf(index);
+                if (formParams.containsKey(ndxAsStr)) {
+                    params.add(formParams.getFirst(ndxAsStr));
+                    formParams.remove(ndxAsStr);
+                }
+            }
+            iter = formParams.keySet().iterator();
+            while (iter.hasNext()) {
+                String valueKey = iter.next();
+                String valueParam = formParams.getFirst(valueKey);
+                params.add(valueKey + "=" + valueParam);
+            }
+        }
+        CommandResult output = getProcessor().feedCommand(resource, params);
+        if (CommandResult.TYPE_OK.equals(output.getType()) && resource.startsWith("partner") && ("add".equals(action) || "delete".equals(action))) {
+            // Store the partnership XML since a successful change was made to the partnerships
+            CommandResult store_cmd_output = getProcessor().feedCommand("partnership", Arrays.asList("store"));
+            output.getResults().addAll(store_cmd_output.getResults());
+        }
+        return output;
+    }
+
     @RolesAllowed({"ADMIN"})
     @GET
     @Path("/{resource}/{action}{id:(/[^/]+?)?}")
     @Produces(MediaType.APPLICATION_JSON)
-    public CommandResult getCommand(@PathParam("resource") String resource, @PathParam("action") @DefaultValue("list") String action, @PathParam("id") String itemId) throws Exception {
+    public Response getCommand(@PathParam("resource") String resource, @PathParam("action") @DefaultValue("list") String action, @PathParam("id") String itemId) throws Exception {
         try {
+            CommandResult output=null;
             // TODO: Figure out a better way to return proper JSON objects instead of this hack
             if (action.equalsIgnoreCase("view") && resource.equalsIgnoreCase("cert") && (itemId != null && itemId.length() > 1)) {
-                return this.getCertificate(itemId.substring(1));
+                output=this.getCertificate(itemId.substring(1));
+            } else {
+                output = processRequest(resource, action, itemId, null);
             }
-            List<String> params = new ArrayList<>();
-            if (action != null) {
-                params.add(action);
-            }
-            if (itemId != null && itemId.length() > 1) {
-                params.add(itemId.substring(1));
-            }
-            Iterator<String> iter = ui.getQueryParameters().keySet().iterator();
-            while (iter.hasNext()) {
-                String valueKey = iter.next();
-                String valueParam = ui.getQueryParameters().getFirst(valueKey);
-                params.add(valueKey + "=" + valueParam);
-            }
-            CommandResult output = getProcessor().feedCommand(resource, params);
-            return output;
+            String jsonResult = this.mapper.writerWithDefaultPrettyPrinter().writeValueAsString(output);
+            return Response.status(200).entity(jsonResult).type(MediaType.APPLICATION_JSON).build();
         } catch (Exception ex) {
             Logger.getLogger(ApiResource.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
             throw ex;
@@ -145,43 +175,19 @@ public class ApiResource {
     @Path("/{resource}/{action}{id:(/[^/]+?)?}")
     @Produces(MediaType.APPLICATION_JSON)
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public CommandResult postCommand(@PathParam("resource") String resource, @PathParam("action") @DefaultValue("list") String action, @PathParam("id") String itemId, MultivaluedMap<String, String> formParams) throws Exception {
+    public Response postCommand(@PathParam("resource") String resource, @PathParam("action") @DefaultValue("list") String action, @PathParam("id") String itemId, MultivaluedMap<String, String> formParams) throws Exception {
         try {
+            CommandResult output=null;
             // TODO: Figure out a better way to return proper JSON objects instead of this hack
             if (action.equalsIgnoreCase("view") && resource.equalsIgnoreCase("cert")) {
-                return this.getCertificate(itemId);
+                output= this.getCertificate(itemId);
+            } else if (action.equalsIgnoreCase("importbystream") && resource.equalsIgnoreCase("cert")) {
+                output= this.importCertificateByStream(itemId.substring(1), formParams);
+            } else {
+                output = processRequest(resource, action, itemId, formParams);
             }
-            if (action.equalsIgnoreCase("importbystream") && resource.equalsIgnoreCase("cert")) {
-                return this.importCertificateByStream(itemId.substring(1), formParams);
-            }
-            List<String> params = new ArrayList<String>();
-            if (action != null) {
-                params.add(action);
-            }
-            if (itemId != null && itemId.length() > 1) {
-                params.add(itemId.substring(1));
-            }
-            Iterator<String> iter = ui.getQueryParameters().keySet().iterator();
-            while (iter.hasNext()) {
-                String valueKey = iter.next();
-                String valueParam = ui.getQueryParameters().getFirst(valueKey);
-                params.add(valueKey + "=" + valueParam);
-            }
-            int length = formParams.size();
-            for (int index = 0; index < length; index++) {
-                if (formParams.containsKey(String.valueOf(index))) {
-                    params.add(formParams.getFirst(String.valueOf(index)));
-                    formParams.remove(index);
-                }
-            }
-            iter = formParams.keySet().iterator();
-            while (iter.hasNext()) {
-                String valueKey = iter.next();
-                String valueParam = formParams.getFirst(valueKey);
-                params.add(valueKey + "=" + valueParam);
-            }
-            CommandResult output = getProcessor().feedCommand(resource, params);
-            return output;
+            String jsonResult = this.mapper.writerWithDefaultPrettyPrinter().writeValueAsString(output);
+            return Response.status(200).entity(jsonResult).type(MediaType.APPLICATION_JSON).build();
         } catch (Exception ex) {
             Logger.getLogger(ApiResource.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
             throw ex;
@@ -194,7 +200,7 @@ public class ApiResource {
     @Path("/{resource}/{id}")
     @Produces(MediaType.APPLICATION_JSON)
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public CommandResult putCommand(@PathParam("param") String resource, @PathParam("id") String itemId, MultivaluedMap<String, String> formParams) throws Exception {
+    public Response putCommand(@PathParam("param") String resource, @PathParam("id") String itemId, MultivaluedMap<String, String> formParams) throws Exception {
         return postCommand(resource, "add", itemId, formParams);
     }
 
@@ -202,7 +208,7 @@ public class ApiResource {
     @DELETE
     @Path("/{resource}/{id}")
     @Produces(MediaType.APPLICATION_JSON)
-    public CommandResult deleteCommand(@PathParam("resource") String resource, @PathParam("id") String itemId) throws Exception {
+    public Response deleteCommand(@PathParam("resource") String resource, @PathParam("id") String itemId) throws Exception {
         return getCommand(resource, "delete", itemId);
     }
 

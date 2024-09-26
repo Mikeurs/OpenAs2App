@@ -7,7 +7,7 @@
         <!-- DO NOT CHANGE THIS "groupId" WITHOUT CHANGING XMLSession.getManifestAttributes.MANIFEST_VENDOR_ID_ATTRIB -->
         <groupId>net.sf.openas2</groupId>
         <artifactId>OpenAS2</artifactId>
-        <version>3.2.0</version>
+        <version>3.11.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -66,7 +66,7 @@
                         <phase>package</phase>
                         <configuration>
                             <target>
-                                <copy todir="${package.assembly.dir}/bin"
+                               <copy todir="${package.assembly.dir}/bin"
                                       verbose="true">
                                     <fileset dir="${project.basedir}/src/bin"/>
                                 </copy>
@@ -100,10 +100,15 @@
                                 <!-- Add the remote jar for connecting to the server command interface -->
                                 <copy file="${remote.connect.jar}"
                                       todir="${package.assembly.dir}/bin/remote" verbose="true"/>
-                                <!-- create distribution package -->
+                                <!-- create distribution package
+                                    basedir="${package.assembly.dir}"
+                                -->
+                                <!--
+                                    Pre-delete the package otherwise it keeps old files in it
+                                -->
+ 							    <delete file="${project.basedir}/dist/${project.dist.package.name}"/>
                                 <zip
                                     destfile="${project.basedir}/dist/${project.dist.package.name}"
-                                    basedir="${package.assembly.dir}"
                                     update="true">
                                         <zipfileset dir="${package.assembly.dir}" encoding="UTF-8"
                                                  includes="**/*.sh" filemode="755"/>
@@ -157,15 +162,15 @@
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcmail-jdk15on</artifactId>
+            <artifactId>bcmail-jdk18on</artifactId>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpkix-jdk15on</artifactId>
+            <artifactId>bcpkix-jdk18on</artifactId>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcprov-jdk15on</artifactId>
+            <artifactId>bcprov-jdk18on</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -189,7 +194,7 @@
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpg-jdk15on</artifactId>
+            <artifactId>bcpg-jdk18on</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
@@ -214,13 +219,13 @@
 			</exclusions>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest-all</artifactId>
+            <artifactId>hamcrest</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -228,6 +233,11 @@
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
+		<dependency>
+		    <groupId>org.mockito</groupId>
+		    <artifactId>mockito-junit-jupiter</artifactId>
+		    <scope>test</scope>
+		</dependency>
         <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
@@ -246,6 +256,10 @@
             <artifactId>jackson-databind</artifactId>
             <type>jar</type>
         </dependency>
+	    <dependency>
+	        <groupId>com.fasterxml.jackson.module</groupId>
+	        <artifactId>jackson-module-jaxb-annotations</artifactId>
+	    </dependency>
         <dependency>
             <groupId>org.glassfish.jersey.media</groupId>
             <artifactId>jersey-media-json-jackson</artifactId>

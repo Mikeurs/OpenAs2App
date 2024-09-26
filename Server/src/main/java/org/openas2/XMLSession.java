@@ -11,11 +11,14 @@ import org.openas2.logging.Logger;
 import org.openas2.params.CompositeParameters;
 import org.openas2.params.InvalidParameterException;
 import org.openas2.params.ParameterParser;
+import org.openas2.message.MessageFactory;
+import org.openas2.partner.Partnership;
 import org.openas2.partner.PartnershipFactory;
 import org.openas2.processor.Processor;
 import org.openas2.processor.ProcessorModule;
 import org.openas2.processor.receiver.PollingModule;
 import org.openas2.schedule.SchedulerComponent;
+import org.openas2.util.FileUtil;
 import org.openas2.util.Properties;
 import org.openas2.util.XMLUtil;
 import org.w3c.dom.Document;
@@ -47,6 +50,7 @@ public class XMLSession extends BaseSession {
     public static final String EL_CMDPROCESSOR = "commandProcessors";
     public static final String EL_PROCESSOR = "processor";
     public static final String EL_PARTNERSHIPS = "partnerships";
+    public static final String EL_MESSAGES = "messages";
     public static final String EL_COMMANDS = "commands";
     public static final String EL_LOGGERS = "loggers";
     public static final String EL_POLLER_CONFIG = "pollerConfigBase";
@@ -55,7 +59,7 @@ public class XMLSession extends BaseSession {
     private CommandRegistry commandRegistry;
     private CommandManager cmdManager = new CommandManager();
 
-    // Poller base confog that will be used for partnership based pollers. Can be overridden in the partnership
+    // Poller base config that will be used for partnership based pollers. Can be overridden in the partnership
     private Node basePollerConfigNode = null;
 
     private Attributes manifestAttributes = null;
@@ -117,6 +121,8 @@ public class XMLSession extends BaseSession {
                 loadLoggers(rootNode);
             } else if (nodeName.equals(EL_POLLER_CONFIG)) {
                 loadBasePartnershipPollerConfig(rootNode);
+            } else if (nodeName.equals(EL_MESSAGES)) {
+                loadMessages(rootNode);
             } else if (nodeName.equals("#text")) {
                 // do nothing
             } else if (nodeName.equals("#comment")) {
@@ -137,20 +143,18 @@ public class XMLSession extends BaseSession {
      * 
      * @param propNode - the "properties" element of the configuration file containing property values
      * @throws InvalidParameterException 
+     * @throws IOException 
      */
-    private void loadProperties(Node propNode) throws InvalidParameterException {
+    private void loadProperties(Node propNode) throws InvalidParameterException, IOException {
         LOGGER.info("Loading properties...");
 
         Map<String, String> properties = XMLUtil.mapAttributes(propNode, false);
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-        Map<String, String> sysProps = (Map)System.getProperties();
-        properties.putAll(sysProps);
         // Make key things accessible via static object for things that do not have
         // accesss to session object
         properties.put(Properties.APP_TITLE_PROP, getAppTitle());
         properties.put(Properties.APP_VERSION_PROP, getAppVersion());
         Properties.setProperties(properties);
-        String appPropsFile = System.getProperty("openas2.properties.file");
+        String appPropsFile = System.getProperty(Properties.OPENAS2_PROPERTIES_FILE_PROP);
         if (appPropsFile != null && appPropsFile.length() > 1) {
             java.util.Properties appProps = new java.util.Properties();
             FileInputStream fis = null;
@@ -187,6 +191,9 @@ public class XMLSession extends BaseSession {
         parser.setReturnParamStringForMissingParsers(true);
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String val = entry.getValue();
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Parsing property: " + entry.getKey() + " : " + val);
+            }
             String parsedVal = ParameterParser.parse(val, parser);
             // Parser will return empty string if there is an unmatched parser ID in the string
             if (parsedVal.length() > 0 && !val.equals(parsedVal)) {
@@ -194,6 +201,22 @@ public class XMLSession extends BaseSession {
                 // Put the changed value into the Properties set
                 Properties.setProperty(key, parsedVal);
             }
+        }
+        /* Put system properties in afterwards to avoid parsing embedded properties that may have 
+           a $ sign in the value but only if the key does not exist.
+        */
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        Map<String, String> sysProps = (Map)System.getProperties();
+        for (Map.Entry<String, String> entry : sysProps.entrySet()) {
+            String key = entry.getKey();
+            if (Properties.getProperty(key, null) == null) {
+                Properties.setProperty(key, entry.getValue());
+            }
+        }
+        // Now check if we need to load Content-Type mappings
+        String contentTypeMapFilename = Properties.getProperty(Partnership.PA_CONTENT_TYPE_MAPPING_FILE, null);
+        if (contentTypeMapFilename != null) {
+            Properties.setContentTypeMap(FileUtil.loadProperties(contentTypeMapFilename));
         }
     }
 
@@ -320,7 +343,7 @@ public class XMLSession extends BaseSession {
             String partnershipName = null;
             Node defaultsNode = moduleNode.getAttributes().getNamedItem("defaults");
             if (defaultsNode == null) {
-                // If there is a format nodethen this is a generic poller module
+                // If there is a format node then this is a generic poller module
                 Node formatNode = moduleNode.getAttributes().getNamedItem("format");
                 if (formatNode == null) {
                     throw new OpenAS2Exception("Invalid poller module coniguration: " + moduleNode.toString());
@@ -330,7 +353,7 @@ public class XMLSession extends BaseSession {
                 // Since the partnerships will not have loaded yet, just use the defaults string as the partnership name
                 partnershipName = defaultsNode.getNodeValue();
             }
-            loadPartnershipPoller(moduleNode, partnershipName, "configPoller");
+            loadPartnershipPoller(moduleNode, partnershipName, Session.CONFIG_POLLER);
             return;
         }
         ProcessorModule procmod = (ProcessorModule) XMLUtil.getComponent(moduleNode, this);
@@ -379,5 +402,11 @@ public class XMLSession extends BaseSession {
         }
         return TITLE;
 
+    }
+
+    private void loadMessages(Node rootNode) throws OpenAS2Exception {
+        LOGGER.info("Loading messages...");
+        MessageFactory messageFx = (MessageFactory) XMLUtil.getComponent(rootNode, this);
+        setComponent(MessageFactory.COMPID_MESSAGE_FACTORY, messageFx);
     }
 }
